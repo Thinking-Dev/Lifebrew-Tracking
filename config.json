@@ -1,0 +1,6 @@
+{
+  "discord_token": "DISCORD_TOKEN",
+  "channel_id": "CHANNEL_ID",
+  "minecraft_server": "MINECRAFT_SERVER",
+  "check_interval": 3
+}
