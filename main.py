@@ -29,7 +29,8 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Track online players
 online_players = set()
-initial_check_done = False  # ✅ NEW: Flag to skip first check
+previous_player_count = 0
+initial_check_done = False
 
 @bot.event
 async def on_ready():
@@ -38,42 +39,50 @@ async def on_ready():
 
 @tasks.loop(seconds=config['check_interval'])
 async def check_minecraft_server():
-    global online_players, initial_check_done
+    global online_players, previous_player_count, initial_check_done
     
     try:
         # Connect to Minecraft server
         server = JavaServer.lookup(config['minecraft_server'])
         status = await server.async_status()
         
-        # Get current players
+        # ✅ FIX: Use player count instead of unreliable sample list
+        current_player_count = status.players.online
+        
+        # Get current players (if available)
         current_players = set()
         if status.players.sample:
             current_players = {player.name for player in status.players.sample}
         
-        # ✅ FIX: On first check, just initialize the player list without announcing
+        # On first check, just initialize without announcing
         if not initial_check_done:
             online_players = current_players
+            previous_player_count = current_player_count
             initial_check_done = True
-            print(f'Initial check complete. Currently online: {online_players}')
+            print(f'Initial check complete. Player count: {current_player_count}')
             return
         
-        # Find new logins
-        new_logins = current_players - online_players
-        
-        # Find logoffs
-        logoffs = online_players - current_players
-        
-        # Update tracked players
-        online_players = current_players
-        
-        # Send notifications only if there are actual changes
-        channel = bot.get_channel(config['channel_id'])
-        if channel:
-            for player in new_logins:
-                await channel.send(f'✅ **{player}** logged into the server!')
+        # ✅ NEW LOGIC: Only process login/logout if player count actually changed
+        # AND we have reliable sample data
+        if current_player_count != previous_player_count and status.players.sample:
+            # Find new logins
+            new_logins = current_players - online_players
             
-            for player in logoffs:
-                await channel.send(f'❌ **{player}** logged off the server.')
+            # Find logoffs
+            logoffs = online_players - current_players
+            
+            # Send notifications
+            channel = bot.get_channel(config['channel_id'])
+            if channel:
+                for player in new_logins:
+                    await channel.send(f'✅ **{player}** logged into the server!')
+                
+                for player in logoffs:
+                    await channel.send(f'❌ **{player}** logged off the server.')
+        
+        # Update tracked state
+        online_players = current_players if current_players else online_players
+        previous_player_count = current_player_count
                 
     except Exception as e:
         print(f'Error checking server: {e}')
@@ -97,6 +106,8 @@ async def server_status(ctx):
         if status.players.sample:
             players_list = '\n'.join([p.name for p in status.players.sample])
             embed.add_field(name="Online Players", value=players_list, inline=False)
+        else:
+            embed.add_field(name="Online Players", value="Player list not available", inline=False)
         
         await ctx.send(embed=embed)
     except Exception as e:
