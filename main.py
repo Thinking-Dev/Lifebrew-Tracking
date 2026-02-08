@@ -42,7 +42,7 @@ async def check_minecraft_server():
     try:
         # Connect to Minecraft server
         server = JavaServer.lookup(config['minecraft_server'])
-        status = await asyncio.to_thread(server.status)
+        status = await server.async_status()  # ✅ FIX 1: Use async_status() instead of asyncio.to_thread
         
         # Get current players
         current_players = set()
@@ -79,7 +79,7 @@ async def server_status(ctx):
     """Check current server status"""
     try:
         server = JavaServer.lookup(config['minecraft_server'])
-        status = await asyncio.to_thread(server.status)
+        status = await server.async_status()  # ✅ FIX 2: Use async_status() here too
         
         embed = discord.Embed(title="Minecraft Server Status", color=0x00ff00)
         embed.add_field(name="Players Online", value=f"{status.players.online}/{status.players.max}")
